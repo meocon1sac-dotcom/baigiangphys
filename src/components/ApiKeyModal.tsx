@@ -12,7 +12,8 @@ import {
   Trash2,
   Sparkles,
   Info,
-  Check
+  Check,
+  HelpCircle
 } from "lucide-react";
 import {
   getStoredApiKey,
@@ -46,12 +47,30 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
 
   if (!isOpen) return null;
 
+  const trimmedInput = apiKeyInput.trim();
+  const isSuspiciousFormat =
+    trimmedInput.length > 0 &&
+    (trimmedInput.startsWith("AQ.") ||
+      trimmedInput.startsWith("ya29.") ||
+      (!trimmedInput.startsWith("AIzaSy") && trimmedInput.length > 10));
+
   const handleTestKey = async () => {
     const keyToTest = apiKeyInput.trim();
     if (!keyToTest) {
       setTestResult({
         status: "error",
         message: "Vui lòng nhập API Key trước khi kiểm tra.",
+      });
+      return;
+    }
+
+    if (keyToTest.startsWith("AQ.") || keyToTest.startsWith("ya29.")) {
+      setTestResult({
+        status: "error",
+        message:
+          "Khóa bạn vừa nhập bắt đầu bằng '" +
+          keyToTest.slice(0, 5) +
+          "...' (đây là OAuth Access Token hoặc mã phiên tạm thời). Google Gemini API Key chuẩn từ Google AI Studio luôn bắt đầu bằng tiền tố 'AIzaSy...'.",
       });
       return;
     }
@@ -69,7 +88,14 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
         body: JSON.stringify({ apiKey: keyToTest }),
       });
 
-      const data = await res.json();
+      const responseText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseErr) {
+        data = { error: "Không thể phân tích phản hồi từ máy chủ. Vui lòng kiểm tra lại API Key." };
+      }
+
       if (res.ok && data.valid) {
         setTestResult({
           status: "success",
@@ -84,7 +110,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
     } catch (err: any) {
       setTestResult({
         status: "error",
-        message: err.message || "Lỗi mạng khi kiểm tra API Key.",
+        message: err.message || "Lỗi kết nối khi kiểm tra API Key.",
       });
     } finally {
       setIsTesting(false);
@@ -98,7 +124,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
     setTimeout(() => {
       setSavedSuccess(false);
       onClose();
-    }, 900);
+    }, 800);
   };
 
   const handleRemove = () => {
@@ -141,18 +167,18 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 space-y-5 text-xs sm:text-sm">
+        <div className="p-6 space-y-4 text-xs sm:text-sm max-h-[75vh] overflow-y-auto">
           {/* Key Input Section */}
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
-              <span>Google Gemini API Key</span>
+              <span>Google Gemini API Key (Bắt đầu bằng `AIzaSy...`)</span>
               <a
                 href="https://aistudio.google.com/app/apikey"
                 target="_blank"
                 rel="noreferrer"
                 className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-semibold"
               >
-                <span>Lấy Key miễn phí tại Google AI Studio</span>
+                <span>Lấy Key tại Google AI Studio</span>
                 <ExternalLink className="w-3 h-3" />
               </a>
             </label>
@@ -180,6 +206,23 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
             </div>
           </div>
 
+          {/* Warning for suspicious formats like AQ. */}
+          {isSuspiciousFormat && (
+            <div className="p-3 bg-amber-950/50 border border-amber-500/40 rounded-xl text-amber-200 text-xs space-y-1.5 animate-in fade-in">
+              <div className="font-bold flex items-center gap-1.5 text-amber-300">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>Lưu ý định dạng khóa API</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-amber-200/90">
+                Khóa bạn nhập bắt đầu bằng <code className="px-1 py-0.5 bg-amber-900/60 rounded text-white font-mono">{trimmedInput.slice(0, 6)}...</code>. 
+                Google Gemini API Key chuẩn từ <strong>Google AI Studio</strong> luôn bắt đầu bằng chuỗi <strong>AIzaSy...</strong> (dài khoảng 39 ký tự).
+              </p>
+              <p className="text-[11px] text-amber-300/80">
+                Các chuỗi bắt đầu bằng <code className="font-mono">AQ.</code> hoặc <code className="font-mono">ya29.</code> thường là OAuth token hoặc mã truy cập Cloud Vertex AI, không tương thích với Gemini Developer API.
+              </p>
+            </div>
+          )}
+
           {/* Test connection alert */}
           {testResult.status === "success" && (
             <div className="p-3.5 bg-emerald-950/40 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs flex items-start gap-2.5 animate-in fade-in">
@@ -191,9 +234,25 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
           {testResult.status === "error" && (
             <div className="p-3.5 bg-rose-950/40 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-start gap-2.5 animate-in fade-in">
               <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-              <div>{testResult.message}</div>
+              <div className="leading-relaxed">{testResult.message}</div>
             </div>
           )}
+
+          {/* Step-by-step guide to get API key */}
+          <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
+            <div className="font-bold text-cyan-300 flex items-center gap-1.5 text-xs">
+              <HelpCircle className="w-4 h-4 text-cyan-400" />
+              Hướng dẫn lấy Gemini API Key miễn phí (1 phút):
+            </div>
+            <ol className="list-decimal list-inside text-slate-300 text-[11px] space-y-1 pl-1 leading-relaxed">
+              <li>
+                Truy cập <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-cyan-400 underline font-semibold">aistudio.google.com/app/apikey</a>
+              </li>
+              <li>Đăng nhập bằng tài khoản Google của bạn.</li>
+              <li>Nhấn nút <strong>"Create API key"</strong> (Tạo khóa API).</li>
+              <li>Sao chép mã khóa có dạng <code className="px-1 py-0.5 bg-slate-800 text-cyan-300 font-mono rounded">AIzaSy...</code> và dán vào ô trên.</li>
+            </ol>
+          </div>
 
           {/* Security & Features Info Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -203,14 +262,14 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
                 Bảo mật cục bộ
               </div>
               <p className="text-slate-400 text-[11px] leading-relaxed">
-                Khóa API được lưu trữ an toàn trong trình duyệt của bạn (LocalStorage) và gửi trực tiếp qua header.
+                Khóa API được lưu trữ an toàn trong trình duyệt của bạn (LocalStorage) và chỉ gửi trực tiếp tới máy chủ khi gửi lệnh AI.
               </p>
             </div>
 
             <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1">
               <div className="font-bold text-yellow-300 flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-yellow-400" />
-                Mô hình thế hệ mới
+                Mô hình Gemini 3.7
               </div>
               <p className="text-slate-400 text-[11px] leading-relaxed">
                 Hỗ trợ <strong>Gemini 3.7 Flash</strong> với tốc độ phản hồi cao và độ chuẩn xác vật lý vượt trội.

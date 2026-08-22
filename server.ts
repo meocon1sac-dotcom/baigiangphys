@@ -43,19 +43,39 @@ async function startServer() {
   app.post("/api/gemini/validate", async (req, res) => {
     try {
       const customApiKey =
-        (req.headers["x-gemini-api-key"] as string) || req.body.apiKey;
+        (req.headers["x-gemini-api-key"] as string) || req.body?.apiKey;
 
-      const ai = getGeminiClient(customApiKey);
-      if (!ai) {
+      const rawKey = typeof customApiKey === "string" ? customApiKey.trim() : "";
+
+      if (!rawKey) {
         return res.status(400).json({
           valid: false,
           error: "Vui lòng nhập Gemini API Key để kiểm tra.",
         });
       }
 
+      // Check common non-Gemini formats
+      if (rawKey.startsWith("AQ.") || (!rawKey.startsWith("AIzaSy") && rawKey.length < 30)) {
+        return res.status(400).json({
+          valid: false,
+          error:
+            "Khóa bạn nhập bắt đầu bằng '" +
+            rawKey.slice(0, 5) +
+            "...' không phải định dạng chuẩn của Google Gemini API Key. Google Gemini API Key từ Google AI Studio luôn bắt đầu bằng tiền tố 'AIzaSy...'. Vui lòng truy cập https://aistudio.google.com/app/apikey để tạo API Key.",
+        });
+      }
+
+      const ai = getGeminiClient(rawKey);
+      if (!ai) {
+        return res.status(400).json({
+          valid: false,
+          error: "Không thể khởi tạo Gemini Client với khóa này.",
+        });
+      }
+
       const testRes = await ai.models.generateContent({
         model: "gemini-3.7-flash",
-        contents: "Xin chào, hãy trả lời 'OK' bằng 1 từ duy nhất.",
+        contents: "Hello",
       });
 
       return res.json({
@@ -65,11 +85,20 @@ async function startServer() {
       });
     } catch (err: any) {
       console.error("API Key Validation error:", err);
+      const errMsg = err?.message || String(err);
+      let userFriendlyMsg = "API Key không hợp lệ hoặc đã hết hạn mức.";
+
+      if (errMsg.includes("API_KEY_INVALID") || errMsg.includes("invalid API key") || errMsg.includes("400") || errMsg.includes("403")) {
+        userFriendlyMsg =
+          "API Key không hợp lệ. Khóa Google Gemini API hợp lệ thường bắt đầu bằng 'AIzaSy...'. Vui lòng lấy khóa mới tại https://aistudio.google.com/app/apikey";
+      } else if (errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("429")) {
+        userFriendlyMsg = "API Key đã vượt quá hạn mức truy vấn (Rate limit).";
+      }
+
       return res.status(400).json({
         valid: false,
-        error:
-          err?.message ||
-          "API Key không hợp lệ hoặc đã hết hạn mức. Vui lòng kiểm tra lại.",
+        error: userFriendlyMsg,
+        rawError: errMsg,
       });
     }
   });

@@ -90,11 +90,18 @@ export const AiAssistantChat: React.FC<AiAssistantChatProps> = ({
         }),
       });
 
-      if (!res.ok) {
-        throw new Error("Lỗi kết nối máy chủ");
+      const responseText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        throw new Error("Không thể phân tích phản hồi.");
       }
 
-      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `Lỗi máy chủ (${res.status})`);
+      }
+
       const botMsg: ChatMessage = {
         id: `bot_${Date.now()}`,
         role: "assistant",

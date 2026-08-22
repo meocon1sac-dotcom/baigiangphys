@@ -113,12 +113,18 @@ export default function App() {
         }),
       });
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `Lỗi máy chủ (${res.status})`);
+      const responseText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        throw new Error("Không thể phân tích dữ liệu trả về từ máy chủ.");
       }
 
-      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `Lỗi máy chủ (${res.status})`);
+      }
+
       if (data.lesson) {
         setCurrentLesson(data.lesson);
         setIsGeneratorOpen(false);
