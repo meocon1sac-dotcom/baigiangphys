@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Sparkles,
   BookOpen,
@@ -10,10 +10,13 @@ import {
   Check,
   RotateCcw,
   Zap,
-  Tag
+  Tag,
+  Key,
+  ShieldCheck
 } from "lucide-react";
 import { GradeLevel, LectureDuration, TeachingMethod, PhysicsBranch } from "../types";
 import { PRESET_TOPICS, BRANCH_LABELS, PhysicsPreset } from "../data/presets";
+import { getStoredApiKey, maskApiKey } from "../utils/apiKeyStorage";
 
 interface LessonGeneratorFormProps {
   onGenerate: (formData: {
@@ -26,11 +29,13 @@ interface LessonGeneratorFormProps {
     customNotes?: string;
   }) => void;
   isLoading: boolean;
+  onOpenApiKeyModal?: () => void;
 }
 
 export const LessonGeneratorForm: React.FC<LessonGeneratorFormProps> = ({
   onGenerate,
   isLoading,
+  onOpenApiKeyModal,
 }) => {
   const [topic, setTopic] = useState<string>("Định luật II Newton và phương trình chuyển động");
   const [subTopic, setSubTopic] = useState<string>("Mối liên hệ giữa Lực, Khối lượng và Gia tốc");
@@ -40,6 +45,16 @@ export const LessonGeneratorForm: React.FC<LessonGeneratorFormProps> = ({
   const [branch, setBranch] = useState<PhysicsBranch>("mechanics");
   const [customNotes, setCustomNotes] = useState<string>("");
   const [selectedPresetId, setSelectedPresetId] = useState<string>("preset_newton2");
+  const [currentApiKey, setCurrentApiKey] = useState<string>("");
+
+  useEffect(() => {
+    setCurrentApiKey(getStoredApiKey());
+    const handleKeyChange = () => {
+      setCurrentApiKey(getStoredApiKey());
+    };
+    window.addEventListener("physicraft_api_key_changed", handleKeyChange);
+    return () => window.removeEventListener("physicraft_api_key_changed", handleKeyChange);
+  }, []);
 
   const handleSelectPreset = (preset: PhysicsPreset) => {
     setSelectedPresetId(preset.id);
@@ -242,6 +257,43 @@ export const LessonGeneratorForm: React.FC<LessonGeneratorFormProps> = ({
             placeholder="VD: Nhấn mạnh câu hỏi bẫy học sinh hay mắc sai lầm, đưa thêm ví dụ về công nghệ bán dẫn hoặc động cơ xe điện..."
             className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan-400 transition-colors resize-none"
           />
+        </div>
+
+        {/* Gemini API Key Quick Status */}
+        <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <div className={`p-1.5 rounded-lg ${currentApiKey ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"}`}>
+              <Key className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <div className="font-semibold text-slate-200">
+                {currentApiKey ? (
+                  <span className="flex items-center gap-1.5 text-emerald-400">
+                    <span>Đang dùng API Key cá nhân ({maskApiKey(currentApiKey)})</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  </span>
+                ) : (
+                  <span className="text-slate-300">
+                    Chế độ mặc định (hoặc nhập API Key cá nhân để mở rộng hạn mức)
+                  </span>
+                )}
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Sử dụng Gemini 3.7 Flash để tạo giáo án, bài tập và slide tự động.
+              </div>
+            </div>
+          </div>
+
+          {onOpenApiKeyModal && (
+            <button
+              type="button"
+              onClick={onOpenApiKeyModal}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white rounded-lg text-xs font-semibold border border-slate-700 transition-colors flex items-center gap-1.5"
+            >
+              <Key className="w-3 h-3" />
+              <span>{currentApiKey ? "Đổi API Key" : "Nhập API Key"}</span>
+            </button>
+          )}
         </div>
 
         {/* Submit Button */}

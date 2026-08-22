@@ -6,8 +6,12 @@ import { GoogleGenAI, Type } from "@google/genai";
 
 dotenv.config();
 
-function getGeminiClient(): GoogleGenAI | null {
-  const apiKey = process.env.GEMINI_API_KEY;
+function getGeminiClient(customApiKey?: string): GoogleGenAI | null {
+  const apiKey =
+    (customApiKey && typeof customApiKey === "string" && customApiKey.trim().length > 0)
+      ? customApiKey.trim()
+      : process.env.GEMINI_API_KEY;
+
   if (!apiKey) {
     return null;
   }
@@ -31,8 +35,43 @@ async function startServer() {
   app.get("/api/health", (_req, res) => {
     res.json({
       status: "ok",
-      hasApiKey: Boolean(process.env.GEMINI_API_KEY),
+      hasServerApiKey: Boolean(process.env.GEMINI_API_KEY),
     });
+  });
+
+  // API Route: Validate Gemini API Key
+  app.post("/api/gemini/validate", async (req, res) => {
+    try {
+      const customApiKey =
+        (req.headers["x-gemini-api-key"] as string) || req.body.apiKey;
+
+      const ai = getGeminiClient(customApiKey);
+      if (!ai) {
+        return res.status(400).json({
+          valid: false,
+          error: "Vui lòng nhập Gemini API Key để kiểm tra.",
+        });
+      }
+
+      const testRes = await ai.models.generateContent({
+        model: "gemini-3.7-flash",
+        contents: "Xin chào, hãy trả lời 'OK' bằng 1 từ duy nhất.",
+      });
+
+      return res.json({
+        valid: true,
+        model: "gemini-3.7-flash",
+        sampleResponse: testRes.text?.trim() || "OK",
+      });
+    } catch (err: any) {
+      console.error("API Key Validation error:", err);
+      return res.status(400).json({
+        valid: false,
+        error:
+          err?.message ||
+          "API Key không hợp lệ hoặc đã hết hạn mức. Vui lòng kiểm tra lại.",
+      });
+    }
   });
 
   // API Route: Generate complete Physics lesson
@@ -46,13 +85,15 @@ async function startServer() {
         method = "5e_model",
         branch = "mechanics",
         customNotes = "",
+        apiKey,
       } = req.body;
 
       if (!topic || typeof topic !== "string") {
         return res.status(400).json({ error: "Chủ đề bài giảng là bắt buộc." });
       }
 
-      const ai = getGeminiClient();
+      const customApiKey = (req.headers["x-gemini-api-key"] as string) || apiKey;
+      const ai = getGeminiClient(customApiKey);
 
       const gradeMap: Record<string, string> = {
         lop6_9: "THCS (Lớp 6-9)",
@@ -400,12 +441,13 @@ YÊU CẦU ĐẦU RA JSON CHUẨN XÁC:
   // API Route: AI Physics Assistant Chat
   app.post("/api/physics/chat", async (req, res) => {
     try {
-      const { messages, lessonContext } = req.body;
-      const ai = getGeminiClient();
+      const { messages, lessonContext, apiKey } = req.body;
+      const customApiKey = (req.headers["x-gemini-api-key"] as string) || apiKey;
+      const ai = getGeminiClient(customApiKey);
 
       if (!ai) {
         return res.json({
-          reply: "🤖 Trợ lý Vật lý AI sẵn sàng giải đáp! Bạn có thể hỏi về các công thức, bài tập hoặc cách giảng dạy các khái niệm khó trong bài học này.",
+          reply: "🤖 Trợ lý Vật lý AI sẵn sàng giải đáp! Bạn có thể nhập **Gemini API Key** ở góc trên màn hình để kích hoạt toàn bộ trí tuệ nhân tạo Gemini 3.7 Flash.",
         });
       }
 

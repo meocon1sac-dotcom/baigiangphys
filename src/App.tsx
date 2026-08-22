@@ -16,7 +16,8 @@ import {
   RefreshCw,
   History,
   RotateCcw,
-  Sliders
+  Sliders,
+  Key
 } from "lucide-react";
 import { PhysicsLesson, GradeLevel, LectureDuration, TeachingMethod, PhysicsBranch } from "./types";
 import { LessonGeneratorForm } from "./components/LessonGeneratorForm";
@@ -28,6 +29,8 @@ import { ProblemSolverView } from "./components/ProblemSolverView";
 import { MindMapView } from "./components/MindMapView";
 import { AiAssistantChat } from "./components/AiAssistantChat";
 import { ExportModal } from "./components/ExportModal";
+import { ApiKeyModal } from "./components/ApiKeyModal";
+import { getStoredApiKey } from "./utils/apiKeyStorage";
 
 type ActiveTab = "slides" | "lesson_plan" | "simulation" | "quiz" | "problems" | "mindmap";
 
@@ -38,10 +41,12 @@ export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
   const [isExportOpen, setIsExportOpen] = useState<boolean>(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState<boolean>(false);
+  const [hasCustomApiKey, setHasCustomApiKey] = useState<boolean>(false);
   const [lessonHistory, setLessonHistory] = useState<PhysicsLesson[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Load saved history on mount
+  // Load saved history and api key on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem("physicraft_history");
@@ -52,9 +57,16 @@ export default function App() {
           setCurrentLesson(parsed[0]);
         }
       }
+      setHasCustomApiKey(Boolean(getStoredApiKey()));
     } catch (e) {
       console.warn("Failed to load local history", e);
     }
+
+    const handleKeyChange = () => {
+      setHasCustomApiKey(Boolean(getStoredApiKey()));
+    };
+    window.addEventListener("physicraft_api_key_changed", handleKeyChange);
+    return () => window.removeEventListener("physicraft_api_key_changed", handleKeyChange);
   }, []);
 
   // If no saved lesson, automatically generate an initial demo lesson
@@ -84,10 +96,21 @@ export default function App() {
     setErrorMessage(null);
 
     try {
+      const customApiKey = getStoredApiKey();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (customApiKey) {
+        headers["x-gemini-api-key"] = customApiKey;
+      }
+
       const res = await fetch("/api/physics/generate-lesson", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params),
+        headers,
+        body: JSON.stringify({
+          ...params,
+          apiKey: customApiKey || undefined,
+        }),
       });
 
       if (!res.ok) {
@@ -142,6 +165,22 @@ export default function App() {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              id="btn-open-api-key"
+              onClick={() => setIsApiKeyModalOpen(true)}
+              className={`flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 text-xs sm:text-sm font-semibold rounded-xl border transition-all ${
+                hasCustomApiKey
+                  ? "bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border-emerald-500/40 shadow-sm"
+                  : "bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700/60"
+              }`}
+              title="Cài đặt Google Gemini API Key cá nhân"
+            >
+              <Key className={`w-4 h-4 ${hasCustomApiKey ? "text-emerald-400" : "text-cyan-400"}`} />
+              <span className="hidden md:inline">
+                {hasCustomApiKey ? "Gemini Key: Bật" : "Cài API Key"}
+              </span>
+            </button>
+
             <button
               id="btn-new-lesson"
               onClick={() => setIsGeneratorOpen(!isGeneratorOpen)}
@@ -323,6 +362,7 @@ export default function App() {
             <LessonGeneratorForm
               onGenerate={handleGenerateLesson}
               isLoading={isLoading}
+              onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
             />
           </div>
         )}
@@ -366,6 +406,13 @@ export default function App() {
         lesson={currentLesson}
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
+        onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
+      />
+
+      {/* API Key Modal */}
+      <ApiKeyModal
+        isOpen={isApiKeyModalOpen}
+        onClose={() => setIsApiKeyModalOpen(false)}
       />
 
       {/* Export Modal */}

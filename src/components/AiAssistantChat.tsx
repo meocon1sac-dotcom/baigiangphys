@@ -8,22 +8,25 @@ import {
   Lightbulb,
   MessageSquare,
   X,
-  Minimize2,
-  Maximize2
+  Key,
+  ShieldCheck
 } from "lucide-react";
 import { ChatMessage, PhysicsLesson } from "../types";
 import { MathRenderer } from "./MathRenderer";
+import { getStoredApiKey } from "../utils/apiKeyStorage";
 
 interface AiAssistantChatProps {
   lesson?: PhysicsLesson | null;
   isOpen: boolean;
   onClose: () => void;
+  onOpenApiKeyModal?: () => void;
 }
 
 export const AiAssistantChat: React.FC<AiAssistantChatProps> = ({
   lesson,
   isOpen,
   onClose,
+  onOpenApiKeyModal,
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -62,11 +65,20 @@ export const AiAssistantChat: React.FC<AiAssistantChatProps> = ({
     setIsLoading(true);
 
     try {
+      const customApiKey = getStoredApiKey();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (customApiKey) {
+        headers["x-gemini-api-key"] = customApiKey;
+      }
+
       const res = await fetch("/api/physics/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           messages: newMessages,
+          apiKey: customApiKey || undefined,
           lessonContext: lesson
             ? {
                 title: lesson.overview.title,
@@ -98,7 +110,7 @@ export const AiAssistantChat: React.FC<AiAssistantChatProps> = ({
         {
           id: `bot_err_${Date.now()}`,
           role: "assistant",
-          content: "⚠️ Không thể kết nối với AI. Bạn hãy thử lại sau giây lát.",
+          content: "⚠️ Không thể kết nối với AI. Bạn hãy thử kiểm tra lại Gemini API Key của mình.",
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
@@ -136,12 +148,24 @@ export const AiAssistantChat: React.FC<AiAssistantChatProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={onClose}
-          className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          {onOpenApiKeyModal && (
+            <button
+              onClick={onOpenApiKeyModal}
+              title="Cài đặt API Key"
+              className="p-1.5 text-slate-400 hover:text-cyan-300 rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              <Key className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          <button
+            onClick={onClose}
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Messages List */}
