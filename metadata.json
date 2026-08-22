@@ -1,0 +1,6 @@
+{
+  "name": "PhysiCraft AI - Tạo Bài Giảng Vật Lý",
+  "description": "Nền tảng tạo bài giảng, giáo án, slide thuyết trình, thí nghiệm tương tác và bài tập Vật lý thông minh bằng AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
